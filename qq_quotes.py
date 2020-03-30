@@ -20,7 +20,7 @@ QUOTES_FILE_NAME = 'quotes.dat'
 # 存放所关注证券代码的文件，文件中包含了相应的查询代码
 # 文件中的所有证券的行情信息将会被更新
 # 查询代码的格式为：Market + Symbol
-# Market是证券交易场所（大小写敏感）：sh -- 上海，sz -- 深圳，hk -- 香港
+# Market是证券交易场所（大小写敏感）：sh -- 上海，sz -- 深圳，hk -- 香港，s_jj -- 基金
 # Symbol：证券代码
 WATCHING_STOCKS_FILE = 'watching_stocks.dat'
 
@@ -125,7 +125,7 @@ def refresh_quotes():
     
     
     #调用腾讯的股市行情API获取行情数据
-    # quote_strs = get_quotes_qq(['sh000001','sz399300','sh600519','hk00857','sz000858','sh600010'])
+    # quote_strs = get_quotes_qq(['sh000001','sz399300','sh600519','hk00857','sz000858','s_jj160706'])
     for watching_codes in grouped_watching_codes:  
         quote_strs = get_quotes_qq(watching_codes)
     
@@ -157,7 +157,7 @@ def refresh_quotes():
 def get_quotes_qq(codes):
     '''
     调用腾讯的股市行情API，返回指定证券的行情数据
-    腾讯API调用示例：http://qt.gtimg.cn/q=sz000858,sh600010
+    腾讯API调用示例：http://qt.gtimg.cn/q=sz000858,sh600010,hk00857,s_jj160706
     
     传入的证券代码为一个list，证券代码中的英文字母大小写敏感
     由于腾讯API的限制，每次调用超过30个证券时，就有可能出错
@@ -259,16 +259,32 @@ def parse_full_qq_stock_quote(quote_str):
         print('    ', quote_str, '\n')
         
         return None
-        
+    
     # 正确取出所需字段，第一个是查询代码，第二个是行情数据
+    
+    # 根据查询代码判断，该行情数据的内容是基金还是股票
+    if strs[0].startswith('s_jj'):
+        # 查询代码以s_jj开头，表示是基金
+        return parse_qq_fund_quote(strs[0], strs[1])
+    else:
+        # 其它的认为是股票
+        return parse_qq_stock_quote(strs[0], strs[1])
+    
+
+def parse_qq_stock_quote(query_code, quote_str):
+    '''
+    分解股票行情数据
+    query_code: 查询代码
+    quote_str: 不带查询代码的行情数据字符串
+    '''
     rtn_strs = []
-    rtn_strs.append(strs[0]) # 1 查询代码 - QueryCode
+    rtn_strs.append(query_code) # 1 查询代码 - QueryCode
     
     # 分隔行情数据字符串，波浪号"~"为分隔符
-    fields = strs[1].split('~') 
+    fields = quote_str.split('~') 
     
     rtn_strs.append(fields[2])      # 2 股票代码 - StockSymbol
-    rtn_strs.append(strs[0][:2])    # 3 股票市场 - sz 或者 sh, 港股为hk，就是查询代码的前两位
+    rtn_strs.append(query_code[:2]) # 3 股票市场 - sz 或者 sh, 港股为hk，就是查询代码的前两位
     rtn_strs.append(fields[1])      # 4 股票名称 - StockName
     rtn_strs.append(fields[3])      # 5 当前价格 - StockPrice
     rtn_strs.append(fields[31])     # 6 涨跌 - Change
@@ -286,6 +302,27 @@ def parse_full_qq_stock_quote(quote_str):
         rtn_strs.append(fields[46]) # 9 市净率 - PB
         rtn_strs.append(fields[45]) # 总市值 - TMV，单位是亿人民币
 
+    return rtn_strs
+
+def parse_qq_fund_quote(query_code, quote_str):
+    '''
+    分解基金行情数据
+    query_code: 查询代码
+    quote_str: 不带查询代码的行情数据字符串
+    '''
+    rtn_strs = []
+    rtn_strs.append(query_code) # 1 查询代码 - QueryCode
+    
+    # 分隔行情数据字符串，波浪号"~"为分隔符
+    fields = quote_str.split('~') 
+    
+    rtn_strs.append(fields[0])      # 2 基金代码 - Symbol
+    rtn_strs.append(query_code[:4]) # 3 市场 - s_jj，查询代码前4位
+    rtn_strs.append(fields[1])      # 4 基金名称 - Name
+    rtn_strs.append(fields[3])      # 5 净值 - Price
+    rtn_strs.append(fields[4])      # 6 累计净值
+    rtn_strs.append(fields[2])      # 7 净值日期
+    
     return rtn_strs
 
 def store_quotes(quote_list):
